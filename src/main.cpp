@@ -2,7 +2,7 @@
   @file     main.cpp
   @brief    Breathalyser
   @author   Mateusz Sznejkowski
-  @version  1.0 11/02/2021
+  @version  2.0 11/02/2021
 */
 #include <Arduino.h>
 #include <SPI.h>
@@ -10,9 +10,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
-// ENGLISH  -> 0
-// POLISH   -> 1
-#define LANGUAGE 1
+// ENGLISH    ->  0
+// POLISH     ->  1
+#define LANGUAGE 0
+// CONTINUED  ->  0
+// SINGLE     ->  1
+#define MODE 1
 
 // Defines
 #define SCREEN_WIDTH 128
@@ -30,20 +33,22 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 // Globals
-int TIME_UNTIL_WARMUP = 60;
+uint16_t TIME_UNTIL_WARMUP = 300;
 unsigned long time;
-int value = 0;
 volatile bool timer_flag = false;
 
 // Prototypes
 void PrintTitle(void);
 void PrintWarming(void);
-void PrintAlcohol(int value);
-void PrintAlcoholLevel(int value);
-int ReadAlcohol(void);
-void ButtonHandler();
+void PrintAlcohol(uint16_t value);
+void PrintAlcoholLevel(uint16_t value);
+void PrintInstruction(void);
 void PrintTimer(void);
-void PrintAttention(void);
+
+uint16_t ReadAlcohol(void);
+uint16_t Measure(void);
+
+void ButtonHandler();
 
 void setup()
 {
@@ -71,6 +76,7 @@ void setup()
     {
       while (digitalRead(BUTTON_PIN) == LOW)
         ;
+      delay(10);
       break;
     }
     time = millis() / 1000;
@@ -78,31 +84,50 @@ void setup()
     display.drawRect(9, 50, 110, 10, WHITE);
     display.fillRect(9, 50, mapedValue, 10, WHITE);
     display.display();
-  } while ((int)time <= TIME_UNTIL_WARMUP);
+  } while ((uint16_t)time <= TIME_UNTIL_WARMUP);
+
+#if MODE == 1
+  PrintInstruction();
+#endif
 
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), ButtonHandler, LOW);
 }
 
 void loop()
 {
+#if MODE == 1
+  if (timer_flag == true)
+  {
+    PrintTimer();
+    PrintTitle();
+    display.setTextSize(2);
+#if LANGUAGE == 1
+    display.setCursor(6, 25);
+    display.print(" DMUCHAJ! ");
+#else
+    display.setCursor(0, 25);
+    display.print("   BLOW!   ");
+#endif
+    display.display();
+    uint16_t value = Measure();
+    PrintTitle();
+    PrintAlcohol(value);
+    PrintAlcoholLevel(value);
+    display.display();
+    delay(5000);
+    PrintInstruction();
+    timer_flag = false;
+  }
+#else
   if (millis() % DELAY_TIME == 0)
   {
-    value = ReadAlcohol();
-
-    if (timer_flag == true)
-    {
-      PrintAttention();
-      PrintTimer();
-      timer_flag = false;
-    }
-    else
-    {
-      PrintTitle();
-      PrintAlcohol(value);
-      PrintAlcoholLevel(value);
-    }
+    uint16_t value = ReadAlcohol();
+    PrintTitle();
+    PrintAlcohol(value);
+    PrintAlcoholLevel(value);
     display.display();
   }
+#endif
 }
 
 void PrintTitle(void)
@@ -130,7 +155,7 @@ void PrintWarming(void)
 #endif
 }
 
-void PrintAlcohol(int value)
+void PrintAlcohol(uint16_t value)
 {
   display.setTextSize(2);
   display.setTextColor(WHITE);
@@ -138,7 +163,7 @@ void PrintAlcohol(int value)
   display.println(value);
 }
 
-void PrintAlcoholLevel(int value)
+void PrintAlcoholLevel(uint16_t value)
 {
   display.setTextSize(1);
   display.setTextColor(WHITE);
@@ -196,35 +221,23 @@ void PrintAlcoholLevel(int value)
   }
 }
 
-int ReadAlcohol(void)
-{
-  int value = 0;
-  int val1;
-  int val2;
-  int val3;
-
-  val1 = analogRead(ANALOG_PIN);
-  delay(10);
-  val2 = analogRead(ANALOG_PIN);
-  delay(10);
-  val3 = analogRead(ANALOG_PIN);
-
-  value = (val1 + val2 + val3) / 3;
-  return value;
-}
-
-void PrintAttention(void)
+void PrintInstruction(void)
 {
   PrintTitle();
-  display.setTextSize(2);
-  display.setCursor(6, 25);
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
 #if LANGUAGE == 1
-  display.print("  UWAGA!  ");
+  display.setCursor(3, 25);
+  display.println(" WCISNIJ PRZYCISK I ");
+  display.setCursor(0, 40);
+  display.println("       DMUCHAJ       ");
 #else
-  display.print("ATTENTION!");
+  display.setCursor(3, 25);
+  display.println("  PRESS BUTTON AND  ");
+  display.setCursor(3, 40);
+  display.println("        BLOW        ");
 #endif
   display.display();
-  delay(3000);
 }
 
 void PrintTimer(void)
@@ -232,13 +245,58 @@ void PrintTimer(void)
   for (uint8_t i = 5; i > 0; i--)
   {
     PrintTitle();
-    Serial.println(i);
     display.setTextSize(2);
-    display.setCursor(57, 25);
+    display.setCursor(6, 25);
+#if LANGUAGE == 1
+    display.print("  UWAGA!  ");
+#else
+    display.print("ATTENTION!");
+#endif
+    display.setTextSize(1);
+    display.setCursor(61, 55);
     display.println(i);
     display.display();
     delay(1000);
   }
+}
+
+uint16_t ReadAlcohol(void)
+{
+  int value = 0;
+  int val1;
+  int val2;
+  int val3;
+  int val4;
+  int val5;
+  int val6;
+
+  val1 = analogRead(ANALOG_PIN);
+  delay(20);
+  val2 = analogRead(ANALOG_PIN);
+  delay(20);
+  val3 = analogRead(ANALOG_PIN);
+  delay(20);
+  val4 = analogRead(ANALOG_PIN);
+  delay(20);
+  val5 = analogRead(ANALOG_PIN);
+  delay(20);
+  val6 = analogRead(ANALOG_PIN);
+
+  value = (val1 + val2 + val3 + val4 + val5 + val6) / 6;
+  return value;
+}
+
+uint16_t Measure(void)
+{
+  uint16_t sum = 0;
+  for (uint16_t i = 0; i < 50; i++)
+  {
+    uint16_t value = ReadAlcohol();
+    // if (value > max)
+    //   max = value;
+    sum += value;
+  }
+  return sum / 50;
 }
 
 void ButtonHandler()
