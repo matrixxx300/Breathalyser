@@ -10,6 +10,10 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 
+// ENGLISH  -> 0
+// POLISH   -> 1
+#define LANGUAGE 1
+
 // Defines
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
@@ -26,10 +30,10 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 // Globals
-int TIME_UNTIL_WARMUP = 600;
+int TIME_UNTIL_WARMUP = 60;
 unsigned long time;
 int value = 0;
-volatile bool skip_flag = false;
+volatile bool timer_flag = false;
 
 // Prototypes
 void PrintTitle(void);
@@ -37,7 +41,9 @@ void PrintWarming(void);
 void PrintAlcohol(int value);
 void PrintAlcoholLevel(int value);
 int ReadAlcohol(void);
-void SkipWarmingHandler();
+void ButtonHandler();
+void PrintTimer(void);
+void PrintAttention(void);
 
 void setup()
 {
@@ -51,15 +57,30 @@ void setup()
       ;
   }
 
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), SkipWarmingHandler, LOW);
+  //display.display();
+  //delay(2000);
 
   PrintTitle();
   PrintWarming();
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+
+  do
+  {
+    if (digitalRead(BUTTON_PIN) == LOW)
+    {
+      while (digitalRead(BUTTON_PIN) == LOW)
+        ;
+      break;
+    }
+    time = millis() / 1000;
+    uint16_t mapedValue = map(time, 0, TIME_UNTIL_WARMUP, 0, 110);
+    display.drawRect(9, 50, 110, 10, WHITE);
+    display.fillRect(9, 50, mapedValue, 10, WHITE);
+    display.display();
+  } while ((int)time <= TIME_UNTIL_WARMUP);
+
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), ButtonHandler, LOW);
 }
 
 void loop()
@@ -67,13 +88,12 @@ void loop()
   if (millis() % DELAY_TIME == 0)
   {
     value = ReadAlcohol();
-    time = millis() / DELAY_TIME;
 
-    if ((int)time <= TIME_UNTIL_WARMUP)
+    if (timer_flag == true)
     {
-      time = map(time, 0, TIME_UNTIL_WARMUP, 0, 100);
-      display.drawRect(10, 50, 110, 10, WHITE);
-      display.fillRect(10, 50, time, 10, WHITE);
+      PrintAttention();
+      PrintTimer();
+      timer_flag = false;
     }
     else
     {
@@ -90,16 +110,24 @@ void PrintTitle(void)
   display.clearDisplay();
   display.setTextSize(1);
   display.setTextColor(WHITE);
-  display.setCursor(43, 0);
-  display.println("ALKOMAT");
+  display.setCursor(3, 0);
+#if LANGUAGE == 1
+  display.println("       ALKOMAT       ");
+#else
+  display.println("    BREATHALYSER    ");
+#endif
 }
 
 void PrintWarming(void)
 {
   display.setTextSize(2);
   display.setTextColor(WHITE);
-  display.setCursor(22, 20);
-  display.println("GRZANIE");
+  display.setCursor(6, 20);
+#if LANGUAGE == 1
+  display.println("NAGRZEWNIE");
+#else
+  display.println("WARMING UP");
+#endif
 }
 
 void PrintAlcohol(int value)
@@ -115,31 +143,56 @@ void PrintAlcoholLevel(int value)
   display.setTextSize(1);
   display.setTextColor(WHITE);
 
-  // SZEROKOŚĆ LITERY: 6 PIXELI
+  // LETTER WIDTH: 6 PIXELS
   if (value > 450)
   {
-    display.setCursor(52, 55);
-    display.println("ZGON");
+#if LANGUAGE == 1
+    display.setCursor(3, 55);
+    display.println("        ZGON        ");
+#else
+    display.setCursor(3, 55);
+    display.println("        DEAD        ");
+#endif
   }
   else if (value >= 350)
   {
-    display.setCursor(28, 55);
-    display.println("MOCNO PIJANY");
+#if LANGUAGE == 1
+    display.setCursor(3, 55);
+    display.println("    MOCNO PIJANY    ");
+#else
+    display.setCursor(3, 55);
+    display.println("     VERY DRUNK     ");
+#endif
   }
   else if (value >= 280)
   {
-    display.setCursor(46, 55);
-    display.println("PIJANY");
+#if LANGUAGE == 1
+    display.setCursor(3, 55);
+    display.println("       PIJANY       ");
+#else
+    display.setCursor(0, 55);
+    display.println("        DRUNK        ");
+#endif
   }
   else if (value >= 200 && value < 280)
   {
-    display.setCursor(40, 55);
-    display.println("PO PIWKU");
+#if LANGUAGE == 1
+    display.setCursor(3, 55);
+    display.println("      PO PIWKU      ");
+#else
+    display.setCursor(0, 55);
+    display.println("     A FEW SHOTS     ");
+#endif
   }
   else if (value < 200)
   {
-    display.setCursor(43, 55);
-    display.println("TRZEZWY");
+#if LANGUAGE == 1
+    display.setCursor(0, 55);
+    display.println("       TRZEZWY       ");
+#else
+    display.setCursor(0, 55);
+    display.println("        SOBER        ");
+#endif
   }
 }
 
@@ -160,14 +213,35 @@ int ReadAlcohol(void)
   return value;
 }
 
-void SkipWarmingHandler()
+void PrintAttention(void)
 {
-  if (skip_flag == false)
+  PrintTitle();
+  display.setTextSize(2);
+  display.setCursor(6, 25);
+#if LANGUAGE == 1
+  display.print("  UWAGA!  ");
+#else
+  display.print("ATTENTION!");
+#endif
+  display.display();
+  delay(3000);
+}
+
+void PrintTimer(void)
+{
+  for (uint8_t i = 5; i > 0; i--)
   {
-    skip_flag = true;
-    TIME_UNTIL_WARMUP = 0;
     PrintTitle();
-    PrintAlcohol(value);
-    PrintAlcoholLevel(value);
+    Serial.println(i);
+    display.setTextSize(2);
+    display.setCursor(57, 25);
+    display.println(i);
+    display.display();
+    delay(1000);
   }
+}
+
+void ButtonHandler()
+{
+  timer_flag = true;
 }
