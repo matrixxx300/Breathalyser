@@ -12,16 +12,18 @@
 
 // ENGLISH    ->  0
 // POLISH     ->  1
-#define LANGUAGE 0
+#define LANGUAGE 1
 // CONTINUED  ->  0
 // SINGLE     ->  1
-#define MODE 1
+//#define MODE 1
+volatile uint8_t MODE = 1;
 
 // Defines
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
 #define BUTTON_PIN 2
+#define BUTTON_MODE_PIN 3
 #define ANALOG_PIN 0
 #define DELAY_TIME 100
 
@@ -49,6 +51,7 @@ uint16_t ReadAlcohol(void);
 uint16_t Measure(void);
 
 void ButtonHandler();
+void ButtonModeHandler();
 
 void setup()
 {
@@ -69,6 +72,7 @@ void setup()
   PrintWarming();
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_MODE_PIN, INPUT_PULLUP);
 
   do
   {
@@ -86,48 +90,56 @@ void setup()
     display.display();
   } while ((uint16_t)time <= TIME_UNTIL_WARMUP);
 
-#if MODE == 1
-  PrintInstruction();
-#endif
+  //#if MODE == 1
+  if (MODE == 1)
+    PrintInstruction();
+  //#endif
 
   attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), ButtonHandler, LOW);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_MODE_PIN), ButtonModeHandler, LOW);
 }
 
 void loop()
 {
-#if MODE == 1
-  if (timer_flag == true)
+  //#if MODE == 1
+  if (MODE == 1)
   {
-    PrintTimer();
-    PrintTitle();
-    display.setTextSize(2);
+    if (timer_flag == true)
+    {
+      PrintTimer();
+      PrintTitle();
+      display.setTextSize(2);
 #if LANGUAGE == 1
-    display.setCursor(6, 25);
-    display.print(" DMUCHAJ! ");
+      display.setCursor(6, 25);
+      display.print(" DMUCHAJ! ");
 #else
-    display.setCursor(0, 25);
-    display.print("   BLOW!   ");
+      display.setCursor(0, 25);
+      display.print("   BLOW!   ");
 #endif
-    display.display();
-    uint16_t value = Measure();
-    PrintTitle();
-    PrintAlcohol(value);
-    PrintAlcoholLevel(value);
-    display.display();
-    delay(5000);
-    PrintInstruction();
-    timer_flag = false;
+      display.display();
+      uint16_t value = Measure();
+      PrintTitle();
+      PrintAlcohol(value);
+      PrintAlcoholLevel(value);
+      display.display();
+      delay(5000);
+      PrintInstruction();
+      timer_flag = false;
+    }
   }
-#else
-  if (millis() % DELAY_TIME == 0)
+  //#else
+  else
   {
-    uint16_t value = ReadAlcohol();
-    PrintTitle();
-    PrintAlcohol(value);
-    PrintAlcoholLevel(value);
-    display.display();
+    if (millis() % DELAY_TIME == 0)
+    {
+      uint16_t value = ReadAlcohol();
+      PrintTitle();
+      PrintAlcohol(value);
+      PrintAlcoholLevel(value);
+      display.display();
+    }
+    //#endif
   }
-#endif
 }
 
 void PrintTitle(void)
@@ -147,10 +159,11 @@ void PrintWarming(void)
 {
   display.setTextSize(2);
   display.setTextColor(WHITE);
-  display.setCursor(6, 20);
 #if LANGUAGE == 1
-  display.println("NAGRZEWNIE");
+  display.setCursor(0, 20);
+  display.println("  GRZANIE  ");
 #else
+  display.setCursor(6, 20);
   display.println("WARMING UP");
 #endif
 }
@@ -302,4 +315,14 @@ uint16_t Measure(void)
 void ButtonHandler()
 {
   timer_flag = true;
+}
+
+void ButtonModeHandler()
+{
+  if (MODE == 1)
+    MODE = 0;
+  else
+    MODE = 1;
+  Serial.print("MODE");
+  delay(300);
 }
